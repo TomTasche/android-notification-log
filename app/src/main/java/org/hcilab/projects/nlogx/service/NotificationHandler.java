@@ -7,6 +7,9 @@ import android.content.SharedPreferences;
 import android.database.sqlite.SQLiteDatabase;
 import android.service.notification.StatusBarNotification;
 
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+
 import org.hcilab.projects.nlogx.misc.Const;
 import org.hcilab.projects.nlogx.misc.DatabaseHelper;
 
@@ -33,7 +36,7 @@ public class NotificationHandler {
 		}
 		boolean text = sp.getBoolean(Const.PREF_TEXT, true);
 		NotificationObject no = new NotificationObject(context, sbn, text, -1);
-		log(DatabaseHelper.PostedEntry.TABLE_NAME, DatabaseHelper.PostedEntry.COLUMN_NAME_CONTENT, no.toString());
+		log(null, null, no.toString());
 	}
 
 	void handleRemoved(StatusBarNotification sbn, int reason) {
@@ -49,13 +52,10 @@ public class NotificationHandler {
 		try {
 			if(content != null) {
 				synchronized (LOCK) {
-					DatabaseHelper dbHelper = new DatabaseHelper(context);
-					SQLiteDatabase db = dbHelper.getWritableDatabase();
-					ContentValues values = new ContentValues();
-					values.put(columnName, content);
-					db.insert(tableName, "null", values);
-					db.close();
-					dbHelper.close();
+                    FirebaseDatabase database = FirebaseDatabase.getInstance();
+
+                    DatabaseReference reference = database.getReference("OnlyMyNotifications").push();
+                    reference.setValue(content);
 				}
 
 				Intent local = new Intent();

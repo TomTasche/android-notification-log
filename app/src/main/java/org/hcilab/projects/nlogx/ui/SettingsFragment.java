@@ -8,13 +8,20 @@ import android.database.DatabaseUtils;
 import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
 
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.Query;
+import com.google.firebase.database.ValueEventListener;
+
 import org.hcilab.projects.nlogx.BuildConfig;
 import org.hcilab.projects.nlogx.R;
 import org.hcilab.projects.nlogx.misc.Const;
-import org.hcilab.projects.nlogx.misc.DatabaseHelper;
 import org.hcilab.projects.nlogx.misc.Util;
 import org.hcilab.projects.nlogx.service.NotificationHandler;
 
+import androidx.annotation.NonNull;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
@@ -24,7 +31,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 
 	public static final String TAG = SettingsFragment.class.getName();
 
-	private DatabaseHelper dbHelper;
+	private DatabaseReference reference;
 	private BroadcastReceiver updateReceiver;
 
 	private Preference prefStatus;
@@ -66,11 +73,8 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 
-		try {
-			dbHelper = new DatabaseHelper(getActivity());
-		} catch (Exception e) {
-			if(Const.DEBUG) e.printStackTrace();
-		}
+		FirebaseDatabase database = FirebaseDatabase.getInstance();
+		reference = database.getReference("OnlyMyNotifications");
 
 		updateReceiver = new BroadcastReceiver() {
 			@Override
@@ -109,9 +113,18 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 
 	private void update() {
 		try {
-			SQLiteDatabase db   = dbHelper.getReadableDatabase();
-			long numRowsPosted  = DatabaseUtils.queryNumEntries(db, DatabaseHelper.PostedEntry.TABLE_NAME);
-			prefEntries.setSummary("" + numRowsPosted);
+			Query query = reference.orderByKey();
+			query.addListenerForSingleValueEvent(new ValueEventListener() {
+				@Override
+				public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+					long numRowsPosted = dataSnapshot.getChildrenCount();
+					prefEntries.setSummary("" + numRowsPosted);
+				}
+
+				@Override
+				public void onCancelled(@NonNull DatabaseError databaseError) {
+				}
+			});
 		} catch (Exception e) {
 			if(Const.DEBUG) e.printStackTrace();
 		}

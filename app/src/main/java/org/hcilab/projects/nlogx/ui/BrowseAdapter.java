@@ -11,10 +11,17 @@ import android.os.Handler;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Toast;
+
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.Query;
+import com.google.firebase.database.ValueEventListener;
 
 import org.hcilab.projects.nlogx.R;
 import org.hcilab.projects.nlogx.misc.Const;
-import org.hcilab.projects.nlogx.misc.DatabaseHelper;
 import org.hcilab.projects.nlogx.misc.Util;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -25,6 +32,7 @@ import java.util.HashMap;
 import java.util.Locale;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.app.ActivityOptionsCompat;
 import androidx.core.util.Pair;
 import androidx.recyclerview.widget.RecyclerView;
@@ -46,7 +54,7 @@ class BrowseAdapter extends RecyclerView.Adapter<BrowseViewHolder> {
 
 	BrowseAdapter(Activity context) {
 		this.context = context;
-		loadMore(Integer.MAX_VALUE);
+		loadMore(null);
 	}
 
 	@NonNull
@@ -114,7 +122,7 @@ class BrowseAdapter extends RecyclerView.Adapter<BrowseViewHolder> {
 		return data.size();
 	}
 
-	private void loadMore(long afterId) {
+	private void loadMore(String afterId) {
 		if(!shouldLoadMore) {
 			if(Const.DEBUG) System.out.println("not loading more items");
 			return;
@@ -123,64 +131,70 @@ class BrowseAdapter extends RecyclerView.Adapter<BrowseViewHolder> {
 		if(Const.DEBUG) System.out.println("loading more items");
 		int before = getItemCount();
 		try {
-			DatabaseHelper databaseHelper = new DatabaseHelper(context);
-			SQLiteDatabase db = databaseHelper.getReadableDatabase();
+			FirebaseDatabase database = FirebaseDatabase.getInstance();
 
-			Cursor cursor = db.query(DatabaseHelper.PostedEntry.TABLE_NAME,
-					new String[] {
-							DatabaseHelper.PostedEntry._ID,
-							DatabaseHelper.PostedEntry.COLUMN_NAME_CONTENT
-					},
-					DatabaseHelper.PostedEntry._ID + " < ?",
-					new String[] {""+afterId},
-					null,
-					null,
-					DatabaseHelper.PostedEntry._ID + " DESC",
-					PAGE_SIZE);
-
-			if(cursor != null && cursor.moveToFirst()) {
-				for(int i = 0; i < cursor.getCount(); i++) {
-					DataItem dataItem = new DataItem(context, cursor.getLong(0), cursor.getString(1));
-
-					String thisDate = dataItem.getDate();
-					if(lastDate.equals(thisDate)) {
-						dataItem.setShowDate(false);
-					}
-					lastDate = thisDate;
-
-					data.add(dataItem);
-					cursor.moveToNext();
-				}
-				cursor.close();
+			DatabaseReference reference = database.getReference("OnlyMyNotifications");
+			Query query = reference.orderByKey().limitToFirst(10);
+			if (afterId != null) {
+				query.startAt(afterId);
 			}
+			query.addListenerForSingleValueEvent(new ValueEventListener() {
+				@Override
+				public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+					for (DataSnapshot child : dataSnapshot.getChildren()) {
+						if (afterId != null && child.getKey().equals(afterId)) {
+							continue;
+						}
 
-			db.close();
-			databaseHelper.close();
+						DataItem dataItem = new DataItem(context, child.getKey(), child.getValue(String.class));
+
+						String thisDate = dataItem.getDate();
+						if(lastDate.equals(thisDate)) {
+							dataItem.setShowDate(false);
+						}
+						lastDate = thisDate;
+
+						data.add(dataItem);
+					}
+
+					if(getItemCount() == 0) {
+						Toast.makeText(context, R.string.empty_log_file, Toast.LENGTH_LONG).show();
+						context.finish();
+
+						return;
+					}
+
+					int after = getItemCount();
+
+					if(before == after) {
+						if(Const.DEBUG) System.out.println("no new items loaded: " + getItemCount());
+						shouldLoadMore = false;
+					}
+
+					if(getItemCount() > LIMIT) {
+						if(Const.DEBUG) System.out.println("reached the limit, not loading more items: " + getItemCount());
+						shouldLoadMore = false;
+					}
+
+					handler.post(new Runnable(){
+						public void run(){
+							notifyDataSetChanged();
+						}
+					});
+				}
+
+				@Override
+				public void onCancelled(@NonNull DatabaseError databaseError) {
+				}
+			});
 		} catch (Exception e) {
 			if(Const.DEBUG) e.printStackTrace();
 		}
-		int after = getItemCount();
-
-		if(before == after) {
-			if(Const.DEBUG) System.out.println("no new items loaded: " + getItemCount());
-			shouldLoadMore = false;
-		}
-
-		if(getItemCount() > LIMIT) {
-			if(Const.DEBUG) System.out.println("reached the limit, not loading more items: " + getItemCount());
-			shouldLoadMore = false;
-		}
-
-		handler.post(new Runnable(){
-			public void run(){
-				notifyDataSetChanged();
-			}
-		});
 	}
 
 	private class DataItem {
 
-		private long id;
+		private String id;
 		private String packageName;
 		private String appName;
 		private String text;
@@ -188,7 +202,7 @@ class BrowseAdapter extends RecyclerView.Adapter<BrowseViewHolder> {
 		private String date;
 		private boolean showDate;
 
-		DataItem(Context context, long id, String str) {
+		DataItem(Context context, String id, String str) {
 			this.id = id;
 			try {
 				JSONObject json = new JSONObject(str);
@@ -211,7 +225,7 @@ class BrowseAdapter extends RecyclerView.Adapter<BrowseViewHolder> {
 			}
 		}
 
-		public long getId() {
+		public String getId() {
 			return id;
 		}
 

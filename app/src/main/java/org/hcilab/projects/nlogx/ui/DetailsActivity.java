@@ -18,6 +18,13 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.Query;
+import com.google.firebase.database.ValueEventListener;
+
 import org.hcilab.projects.nlogx.R;
 import org.hcilab.projects.nlogx.misc.Const;
 import org.hcilab.projects.nlogx.misc.DatabaseHelper;
@@ -28,6 +35,7 @@ import org.json.JSONObject;
 import java.text.DateFormat;
 import java.util.Locale;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
@@ -88,87 +96,76 @@ public class DetailsActivity extends AppCompatActivity {
 	}
 
 	private void loadDetails(String id) {
-		JSONObject json = null;
-		String str = "error";
-		try {
-			DatabaseHelper databaseHelper = new DatabaseHelper(this);
-			SQLiteDatabase db = databaseHelper.getReadableDatabase();
+		FirebaseDatabase database = FirebaseDatabase.getInstance();
 
-			Cursor cursor = db.query(DatabaseHelper.PostedEntry.TABLE_NAME,
-					new String[] {
-							DatabaseHelper.PostedEntry.COLUMN_NAME_CONTENT,
-					},
-					DatabaseHelper.PostedEntry._ID + " = ?",
-					new String[] {
-							id
-					},
-					null,
-					null,
-					null,
-					"1");
+		DatabaseReference reference = database.getReference("OnlyMyNotifications");
+		Query query = reference.child(id).orderByKey();
+		query.addListenerForSingleValueEvent(new ValueEventListener() {
+			@Override
+			public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+				JSONObject json = null;
+				String str = "error";
 
-			if(cursor != null && cursor.getCount() == 1 && cursor.moveToFirst()) {
 				try {
-					json = new JSONObject(cursor.getString(0));
+					json = new JSONObject(dataSnapshot.getValue(String.class));
 					str = json.toString(2);
 				} catch (JSONException e) {
 					if(Const.DEBUG) e.printStackTrace();
 				}
-				cursor.close();
-			}
 
-			db.close();
-			databaseHelper.close();
-		} catch (Exception e) {
-			if(Const.DEBUG) e.printStackTrace();
-		}
-		TextView tvJSON = findViewById(R.id.json);
-		tvJSON.setText(str);
+				TextView tvJSON = findViewById(R.id.json);
+				tvJSON.setText(str);
 
-		CardView card = findViewById(R.id.card);
-		CardView buttons = findViewById(R.id.buttons);
-		if(json != null) {
-			packageName = json.optString("packageName", "???");
-			String titleText   = json.optString("title");
-			String contentText = json.optString("text");
-			String text = (titleText + "\n" + contentText).trim();
-			if(!"".equals(text)) {
-				card.setVisibility(View.VISIBLE);
-				ImageView icon = findViewById(R.id.icon);
-				icon.setImageDrawable(Util.getAppIconFromPackage(this, packageName));
-				TextView tvName = findViewById(R.id.name);
-				tvName.setText(Util.getAppNameFromPackage(this, packageName, false));
-				TextView tvText = findViewById(R.id.text);
-				tvText.setText(text);
-				TextView tvDate = findViewById(R.id.date);
-				if(SHOW_RELATIVE_DATE_TIME) {
-					tvDate.setText(DateUtils.getRelativeDateTimeString(
-							this,
-							json.optLong("systemTime"),
-							DateUtils.MINUTE_IN_MILLIS,
-							DateUtils.WEEK_IN_MILLIS,
-							0));
+				CardView card = findViewById(R.id.card);
+				CardView buttons = findViewById(R.id.buttons);
+				if(json != null) {
+					packageName = json.optString("packageName", "???");
+					String titleText   = json.optString("title");
+					String contentText = json.optString("text");
+					String text = (titleText + "\n" + contentText).trim();
+					if(!"".equals(text)) {
+						card.setVisibility(View.VISIBLE);
+						ImageView icon = findViewById(R.id.icon);
+						icon.setImageDrawable(Util.getAppIconFromPackage(DetailsActivity.this, packageName));
+						TextView tvName = findViewById(R.id.name);
+						tvName.setText(Util.getAppNameFromPackage(DetailsActivity.this, packageName, false));
+						TextView tvText = findViewById(R.id.text);
+						tvText.setText(text);
+						TextView tvDate = findViewById(R.id.date);
+						if(SHOW_RELATIVE_DATE_TIME) {
+							tvDate.setText(DateUtils.getRelativeDateTimeString(
+									DetailsActivity.this,
+									json.optLong("systemTime"),
+									DateUtils.MINUTE_IN_MILLIS,
+									DateUtils.WEEK_IN_MILLIS,
+									0));
+						} else {
+							DateFormat format = DateFormat.getDateTimeInstance(DateFormat.DEFAULT, DateFormat.SHORT, Locale.getDefault());
+							tvDate.setText(format.format(json.optLong("systemTime")));
+						}
+
+						try {
+							ApplicationInfo app = DetailsActivity.this.getPackageManager().getApplicationInfo(packageName, 0);
+							buttons.setVisibility(View.VISIBLE);
+							appUid = app.uid;
+						} catch (PackageManager.NameNotFoundException e) {
+							if(Const.DEBUG) e.printStackTrace();
+							buttons.setVisibility(View.GONE);
+						}
+					} else {
+						card.setVisibility(View.GONE);
+
+					}
 				} else {
-					DateFormat format = DateFormat.getDateTimeInstance(DateFormat.DEFAULT, DateFormat.SHORT, Locale.getDefault());
-					tvDate.setText(format.format(json.optLong("systemTime")));
-				}
-
-				try {
-					ApplicationInfo app = this.getPackageManager().getApplicationInfo(packageName, 0);
-					buttons.setVisibility(View.VISIBLE);
-					appUid = app.uid;
-				} catch (PackageManager.NameNotFoundException e) {
-					if(Const.DEBUG) e.printStackTrace();
+					card.setVisibility(View.GONE);
 					buttons.setVisibility(View.GONE);
 				}
-			} else {
-				card.setVisibility(View.GONE);
-
 			}
-		} else {
-			card.setVisibility(View.GONE);
-			buttons.setVisibility(View.GONE);
-		}
+
+			@Override
+			public void onCancelled(@NonNull DatabaseError databaseError) {
+			}
+		});
 	}
 
 	private void finishWithToast() {

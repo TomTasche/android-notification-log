@@ -14,6 +14,7 @@ import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.Query;
 import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.messaging.FirebaseMessaging;
 
 import org.hcilab.projects.nlogx.BuildConfig;
 import org.hcilab.projects.nlogx.R;
@@ -92,10 +93,14 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 			prefStatus.setSummary(R.string.settings_notification_access_enabled);
 			prefText.setEnabled(true);
 			prefOngoing.setEnabled(true);
+
+			FirebaseMessaging.getInstance().unsubscribeFromTopic("OnlyMyNotificationsTopic");
 		} else {
 			prefStatus.setSummary(R.string.settings_notification_access_disabled);
 			prefText.setEnabled(false);
 			prefOngoing.setEnabled(false);
+
+			FirebaseMessaging.getInstance().subscribeToTopic("OnlyMyNotificationsTopic");
 		}
 
 		IntentFilter filter = new IntentFilter();

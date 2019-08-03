@@ -134,9 +134,10 @@ class BrowseAdapter extends RecyclerView.Adapter<BrowseViewHolder> {
 			FirebaseDatabase database = FirebaseDatabase.getInstance();
 
 			DatabaseReference reference = database.getReference("OnlyMyNotifications");
-			Query query = reference.orderByKey().limitToFirst(10);
+			Query query = reference.orderByKey().limitToLast(10);
 			if (afterId != null) {
-				query.startAt(afterId);
+				// TODO: doesn't work
+				query.endAt(afterId);
 			}
 			query.addListenerForSingleValueEvent(new ValueEventListener() {
 				@Override
